@@ -1,0 +1,80 @@
+There are two connections in this PCAP file. In both connections, a client connects to a server. Pick one connection and answer the following questions based on this connection.
+
+1. List the packet numbers (column on the left in Wireshark) for the TCP three-way handshake of this connection.
+
+The first set of three-way handshake's packet numbers are 1, 3, 5. 
+
+
+2. What are the two IP addresses in this connection? What is the IP prefix/subnet and the owner (AS number) of each IP? 
+(Hint: use whois). If you're unable to find such information on the IP from whois, what is the reason?
+
+The two IP addresses are 192.168.1.15 and 128.143.67.11. 
+
+For the first one, I couldn't get any information, I believe that it is a private IP address. But for the second one, I found that it is a UVA-based IP. 
+The IP prefix/subnet is "/16" and the owner/AS number is UVA AS225. 
+
+
+3. What is the client's port number? What is the server's port number? 
+
+The client's port number is 56078, the server's port number is 443. 
+
+
+4. What is the highest TLS version supported by the client? Please include the packet number.
+
+TLS 1.2. As seen in packet number 7. 
+
+
+5. Which ciphersuite does the server choose for the connection? Please include the packet number.
+
+By inspecting the Server Hello, we can see that the server chose 
+
+Frame 11: 1514 bytes on wire (12112 bits), 1514 bytes captured (12112 bits)
+Ethernet II, Src: Netgear_0e:8e:fe (10:0c:6b:0e:8e:fe), Dst: Apple_4f:35:8a (f8:ff:c2:4f:35:8a)
+Internet Protocol Version 4, Src: 128.143.67.11, Dst: 192.168.1.15
+Transmission Control Protocol, Src Port: 443, Dst Port: 56078, Seq: 1, Ack: 526, Len: 1448
+Transport Layer Security
+    TLSv1.2 Record Layer: Handshake Protocol: Server Hello
+        Content Type: Handshake (22)
+        Version: TLS 1.2 (0x0303)
+        Length: 65
+        Handshake Protocol: Server Hello
+            Handshake Type: Server Hello (2)
+            Length: 61
+            Version: TLS 1.2 (0x0303)
+            Random: 7a12e7c89b6379ed18e47d8b53d7b39560db89094b214bad1d1447427608fca6
+            Session ID Length: 0
+            Cipher Suite: TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 (0xc02f)
+            Compression Method: null (0)
+            Extensions Length: 21
+            Extension: server_name (len=0)
+            Extension: renegotiation_info (len=1)
+            Extension: ec_point_formats (len=4)
+            Extension: session_ticket (len=0)
+            [JA3S Fullstring: 771,49199,0-65281-11-35]
+            [JA3S: 389ed42c02ebecc32e73aa31def07e14]
+
+"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 (0xc02f)" cipher suite. This is detailed in packet 11. 
+
+
+6. Choose a packet in this connection (after the TCP three-way handshake). 
+Write down the packet number, and the Sequence number and Acknowledge number in this packet. 
+Based on the Seq/Ack numbers, which IP has sent more data to the other IP? And Why?
+
+
+The trivial way to do this is to count the number of times we see source as 192... and the number of times
+we see dest as 128.... 
+
+192...: 19
+128...: 18
+
+But that doesn't look right as we're just counting packets. 
+
+But for the purpose of this problem, lets just look at the Seq/ACK values. 
+
+By looking at packet 61, I think that the 128.143.67.11 IP sent more data than the other IP because
+this packet is destined to 128.143.67.11 and has an ack of 13700 but a seq of only 3372. Indicating that 
+
+128.143.67.11 --> 192.168.1.15 was about 13700 packets
+192.168.1.15 --> 128.143.67.11 was about 3372 packets
+
+

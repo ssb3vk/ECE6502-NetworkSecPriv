@@ -1,0 +1,205 @@
+########
+# All questions refer to 208.65.152.0/22 AND all its sub-prefixes
+# Please refer to HW2 webpage for detailed instructions for each question
+########
+
+I'm going to assume that we only care about the bgpdump format of the file. So I'm going to assume that the 
+mrt2bgpdump.py code is the only one that I care about. 
+
+From this link: https://docs.thousandeyes.com/product-documentation/internet-and-wan-monitoring/tests/bgp-tests/working-with-raw-bgp-data
+
+I found that the output is in the following order: 
+BGP Protocol
+timestamp (in epoch format)
+W/A/B (withdrawal/announcement/routing table)
+Peer IP (address of the monitor)
+Peer ASN (ASN of the monitor)
+Prefix
+ASPath
+Origin Protocol (typically always IGP)
+Next Hop
+LocalPref
+MED
+Community strings
+Atomic Aggregator
+Aggregator
+
+$ bgpdump -m rib.20140801.0000.bz2
+2014-08-07 13:49:42 [info] logging to syslog
+TABLE_DUMP2|1406851200|B|167.142.3.6|5056|1.0.0.0/24|5056 6461 15169|IGP|167.142.3.6|0|0||NAG||
+TABLE_DUMP2|1406851200|B|66.185.128.1|1668|1.0.0.0/24|1668 15169|IGP|66.185.128.1|0|0||NAG||
+TABLE_DUMP2|1406851200|B|157.130.10.233|701|1.0.0.0/24|701 6453 15169|IGP|157.130.10.233|0|0||NAG||
+TABLE_DUMP2|1406851200|B|198.129.33.85|293|1.0.0.0/24|293 15169|IGP|198.129.33.85|0|0||NAG||
+
+
+Because we only care about
+	
+	In this assignment, we will only focus on routes involving 208.65.152.0/22 AND all its sub-prefixes. 
+	All questions refer to 208.65.152.0/22 AND all its sub-prefixes.
+
+I will modify the code such that whenever we run it on a file, we focus only on the given values. So at lines
+108 and 125, we ensure that '208.65.152' is part of the prefix and only then do we print out. This is because with 
+the /22 we know that we only care about the most significant 22 bits so the first two segments and the 6 most sig bits
+of the third segment. And in our case, 152 --> 10011000 and we only define the bits 100110 and leave the last two bits
+as is. 
+
+1. Observation from rib.20080224.1822
+
+Here I believe are just multiple ASs advertising paths to the AS 36561 (Youtube) via the prefix
+208.65.152.0/22. There are a ton of peer ASs here doing this advertising on behalf of Youtube. 
+And all of them seem to be valid routes. 
+
+1.1 AS 36561 is announcing prefix 208.65.152.0/22. 
+
+1.2 If we lookup the AS via "whois.arin.net/rest/asn/AS36561" online, we find that it is a Youtube AS
+and is the organization that owns it is Google LLC. 
+
+1.3 If we do a whois terminal lookup on "208.65.152.0/22" we find that the prefix is owned by Youtube LLC.
+
+
+2. Observation from updates.20080224.1839
+
+We find that ASes are now advertising paths to the AS 17557 for the prefix 208.65.153.0/24. Because this
+is subsumed by the prefix 208.65.152.0/22, addresses routed for 208.65.152.0/22 are instead routed to 
+208.65.153.0/24, and the corresponding AS 17557, as it is more precise. All the prior ASes that were 
+advertising paths to 36561 are now advertising paths to 17557. 
+
+2.1 We find that the AS 17557 is announcing the prefix 208.65.153.0/24. 
+
+2.2 The name of the organization that owns AS 17557 is Pakistan Telecommunication company limited. 
+
+2.3 The AS that belongs to Pakistan Telecommunication (17557) company will receive the packets destined for 
+IP address 208.65.153.0 because in binary the address translates to: 
+11010000.01000001.10011001.00000000
+
+which has a closer match to the prefix advertised by Pakistan Telecom: 
+11010000.01000001.10011001.--------
+
+rather than the prefix advertised by Youtube: 
+11010000.01000001.100110--.--------
+
+24 bits matched instead of 22 bits matched. 
+
+2.4 The AS that belongs to Youtube/Google (36561) will receive the packets destined for
+the IP address 208.65.152.0 because in binary the address translates to: 
+11010000.01000001.10011000.00000000
+
+which has a closer match to the prefix advertised by Youtube: 
+11010000.01000001.100110--.--------
+
+rather than the prefix advertised by Pakistan Telecom: 
+11010000.01000001.10011001.--------
+
+Because in the left-most bit of the third segment, the prefix advertised by Pakistan Telecom differs
+from the IP address. But Youtube's prefix matches all specified bits (22). 
+
+3. Observation from updates.20080224.1954
+
+Here we see that Youtube's AS starts advertising a prefix that is as precise as the one advertised by 
+Pakistan Telecom. This allows it to reclaim the traffic that was diverted to Pakistan Telecom's AS (17557). 
+Interestingly all the paths that I can see in this file are all diverted through AS 3549 before getting
+to AS 36561 (Youtube). 
+
+3.1 Once again we find AS 36561 (Youtube) advertising 208.65.153.0/24. 
+
+3.2 It depends on whichever AS the packet is on. Depending on the number of hops required for the packet
+to be delivered to the prefix, different routings can occur. This is because The BGP protocol prefers
+shorter paths and because both prefixes are idnetical, the only differentiating factor between the 
+advertised paths is the length of the paths. AS long as the advertised path to AS 36561 (Youtube) is shorter than 
+the advertised path to AS 17557 (Pakistan Telecom), Youtube will receive the packet. Otherwise, 
+if the Pakistan Telecom path is shorter, then the Pakistan Telecom AS will receive the packet. 
+
+3.3 I think that the AS made the announcement (the updated prefix) specified in this file so that partial
+service availability could be restored. I think at this point Youtube realized that another AS was advertising
+a more specific prefix than themselves and temporarily began to identify a prefix with the same specificity so that 
+at least internet traffic generated closer locally (fewer AS hops) than from Pakistan Telecom would be routed properlyl. 
+If users are not able to route their packets to the proper AS, I am going to assume that they would not be able to access Youtube. 
+I am going to assume that Pakistan Telecom isn't impersonating Youtube, only intercepting and retaining Youtube's traffic. 
+
+We can clearly see ASes switch over to shorter paths by observing AS 3356 in the prior file and the current file. 
+Before, the AS path advertised had four nodes in the path but in the current file there are only 3 nodes in the path. 
+This shows that ASes are actively monitoring path lengths and switching to shorter paths. I am assuming that ASes that observe
+path lengths to prefixes that are equal to the paths they currently hold don't bother switching over to the new path (because
+they are of the same length). Obviously its more complicated than that but close enough. 
+
+
+4. Observation from updates.20080224.2009
+
+Here we find that Youtube (AS 36561) announces a more precise prefix than the prefix it announced before
+or even the prefix announced by Pakistan Telecom. Now it announces a prefix to 25 significant bits. 
+
+4.1 AS 36561 (Youtube) annnounces two new prefixes 208.65.153.0/25 and 208.65.153.128/25. Basically
+two identical addresses with a longer prefix that just have the least significant bit flipped. 
+
+4.2 Now we are guaranteed to have AS 36561 (Youtube) receive the traffic destined for IP address 208.65.153.0
+because one of the prefixes announced by the AS 36561 (Youtube) is: 
+
+11010000.01000001.10011001.0-------
+
+Which is a 25 bit match to the IP 208.65.153.0: 
+
+11010000.01000001.10011001.00000000
+
+which is greater than the 24 bit match to the address Pakistan Telecom can offer: 
+
+11010000.01000001.10011001.--------
+
+But in the case that a router does not acknowledge the /25 prefix length (something that I found after a google search)
+then it is possible that it will default to routing based off of path length. 
+
+4.3 The AS made the announcement that happens in this file because now it is guaranteed traffic pointed at 
+the given address in a mode that is not dependent on the length of the AS path such as in Q3. But keep
+in mind that this fix only works for routers that support a /25 prefix length. For routers that do not, 
+the length-based routing will occur. We can see that not all routers support the /25 prefix length because not all 
+of them switch over to advertising towards Youtube's AS. And this routing switches over because the /25 prefixes 
+have both bits set so either address match will be routed towards the Youtube AS. 
+
+
+
+5. Observation from rib.20080224.2024
+
+We can see two conflicting advertised prefixes from two different ASes. One AS 36561 (Youtube) is advertising
+208.65.152.0/22 and the other AS 17557 (Pakistan Telecom) is advertising prefix 208.65.153.0/24. But
+what's really interesting about both of these is that the almost all the paths to AS 36561 are routed throguh 
+AS 3549. While almost all the paths to 17557 are routed through 3491. 
+
+It shows that Youtube has not been able to reclaim all of the AS advertisements via its /25 prefix advertisements
+showing that some routers don't support the extended prefix lengths. 
+
+5.1 I can see two unique ASes and prefix announcements. The first is AS 36561 (Youtube) announcing the 
+208.65.152.0/22 the other is AS 17557 (Pakistan Telecom) which is announcing prefix 208.65.153.0/24. 
+
+6. Observation from updates.20080224.2041
+
+Here we see that upstream ASes (farther away from the destination) are manipulating the AS paths announced
+by AS 17557 by appending a duplicate AS 17557 to the end of the path, artificially making it longer. 
+This happens for AS neighbors announcing 17557 such as 5413 and 13237 but not for AS neighbors announcing
+17557 such as 286. But this may just be a timing discrepancy. 
+
+6.1 The AS path changed in the announcements. Originally it was 13237 3491 17557 for the first 3 announcements
+but for the fourth one, it becomes 13237 3491 17557 17557. A duplicate 17557 was attached to the end of the path. 
+
+6.2 I believe that the penultimate AS on the path effected this change (AS 3491) so that upstream ASes
+would drop the 17557 path (due to its length) in favor of the real youtube path because the real youtube path is
+a lot shorter.  
+
+6.3 I can see that AS 5413 has a similar change in its AS path to 17557 (duplicated 17557 at the end). Also 
+AS 7660 has a similar change in the path. Note that AS 5413 and 17557 both have 3491 on its path to 17557 so 
+the path lengthening may be due to AS 3491. 
+
+
+7. Observation from updates.20080224.2056
+
+We can see that AS 13237 performs a Withdrawal of its original path to 17557 (Pakistan Telecom) for prefix 208.65.153.0/24 in favor
+of a path to 36561 (Youtube). All other ASes are announcing paths to Youtube for the given prefix. 
+
+7.1 Here are the announcements: 
+
+U|A|1203886849.000000||13237|208.65.153.0/24|81.209.156.1|13237 3491 17557 17557|17557|
+U|W|1203886881.000000||13237|208.65.153.0/24||||||
+U|A|1203886882.000000||13237|208.65.153.0/24|81.209.156.1|13237 3549 36561|36561|
+U|A|1203886882.000000||13237|208.65.153.0/24|81.209.156.1|13237 3549 36561|36561|
+
+7.2 We can clearly see how AS 13237 drops that path to AS 17557 (due to its length) withdrawing it 
+and advertises a shorter path for the same prefix to AS 36561 (Youtube). This would restore traffic to 
+Youtube through AS 36561. 
